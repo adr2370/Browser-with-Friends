@@ -8,30 +8,22 @@ var currentSession="";
 var pubnub;
 var sessionOwner="";
 var opened="true";
-var apiKey = "11640702"; // Replace with your API key. See https://dashboard.tokbox.com/projects
-var apiSecret = "599049e15f15f93bf46c991afe2553404a606d7d"; // Replace with your API key. See https://dashboard.tokbox.com/projects
-var sessionId = ""; // Replace with your own session ID. See https://dashboard.tokbox.com/projects
-var token = ''; // Replace with a generated token. See https://dashboard.tokbox.com/projects
-var videoCount = 0;
 
-var session;
-var publisher;
-var subscribers = {};
-var VIDEO_WIDTH = 140;
-var VIDEO_HEIGHT = 105;
+var scrollListener;
 
 appAPI.ready(function($) {
 	appAPI.$=$;
 	if(window.location.href.substring(0,22)!="http://crossrider.com/") {
-		sessionId=appAPI.db.get("session");
+	scrollListener = function() {
+		checkBorder();
+	};
+	window.addEventListener('scroll', scrollListener, false);
 	appAPI.resources.includeRemoteJS('https://static.firebase.com/v0/firebase.js');
-	appAPI.resources.includeRemoteJS('http://static.opentok.com/webrtc/v2.0/js/TB.min.js');
-	appAPI.TB=TB;
 	appAPI.resources.includeRemoteJS('http://cdn.pubnub.com/pubnub-3.1.min.js');
 	$('head').append('<style type="text/css">button.css3button {font-family: Arial, Helvetica, sans-serif;font-size: 18px;color: #000000;padding: 5px 10px;background: -moz-linear-gradient(top,#fff3db 0%,#ff0000 25%,#ff3c00);background: -webkit-gradient(linear, left top, left bottom, from(#fff3db),color-stop(0.25, #ff0000),to(#ff3c00));-moz-border-radius: 6px;-webkit-border-radius: 6px;border-radius: 6px;border: 1px solid #b85f00;-moz-box-shadow:0px 1px 3px rgba(000,000,000,0.5),inset 0px -1px 0px rgba(255,255,255,0.7);-webkit-box-shadow:0px 1px 3px rgba(000,000,000,0.5),inset 0px -1px 0px rgba(255,255,255,0.7);box-shadow:0px 1px 3px rgba(000,000,000,0.5),inset 0px -1px 0px rgba(255,255,255,0.7);text-shadow:0px -1px 1px rgba(000,000,000,0.2),0px 1px 0px rgba(255,255,255,0.3);}</style> ');
-	$('body').prepend('<div id="stuff"><img id="arrow" src="'+appAPI.resources.getImage('arrowup.png')+'" width="30px" style="position:absolute;top:0px;right:0px;"></div>');
-	$('#stuff').attr('style','border: 1px solid black;position: fixed; background: white;z-index: 10000;display: block; width: 300px;margin: 0;overflow-y:scroll !important;overflow-x:hidden; top: 0px;right: 0px;height:100%;text-align: left;');
-	$('#stuff').prepend('<div id="login" style="margin-top:7px;margin-left:8px;margin-bottom:10px;margin-right:15px;"></div>');
+	$('body').prepend('<div id="browseWithMe"><img id="arrow" src="'+appAPI.resources.getImage('arrowup.png')+'" width="30px" style="position:absolute;top:0px;right:0px;"></div>');
+	$('#browseWithMe').attr('style','border: 1px solid black;position: fixed; background: white;z-index: 10000;display: block; width: 300px;margin: 0; top: 0px;right: 0px;height:100%;text-align: left;border-bottom: 0px;');
+	$('#browseWithMe').prepend('<div id="login" style="margin-top:7px;margin-left:8px;margin-bottom:10px;margin-right:15px;"></div>');
 	var services=new Array("dropbox","facebook","fitbit","flickr","foursquare","github","google","instagram","linkedin","meetup","rdio","runkeeper","stocktwits","tout","tumblr","twitter","wordpress","youtube");
 	for(var i=0;i<services.length;i++) {
 		var c=services[i];
@@ -46,32 +38,41 @@ appAPI.ready(function($) {
   		}
 	);
 	$('#arrow').click(function () {
-		if($('#stuff').width()<=50) {
+		if($('#browseWithMe').width()<=50) {
 			//user opened the app
 			opened='true';
-	      	$('#stuff').children().show();
-      		$('#stuff').animate({ width:'300px' }, { queue: false, duration: 500, complete: function() {
+	      	$('#browseWithMe').children().show();
+      		$('#browseWithMe').animate({ width:'300px' }, { queue: false, duration: 500, complete: function() {
       			$('#arrow').attr('src',appAPI.resources.getImage('arrowup.png'));
-	      		if(opened=='true'&&currentSession.length>0) {
-	    			joinRoom(currentSession,sessionOwner);
-	    		}
+      			if(appAPI.$('#box').length>0) $('#box').animate({ right:'0px' }, { queue: false, duration: 500 });
+				checkBorder();
+				if(currentSession.length>0&&$('#chat').length==0) {
+					joinRoom(currentSession,sessionOwner);
+				}
       			heightResize();
       		} });
-      		$('#stuff').animateAuto('height', 500, heightResize);
-      		$('#stuff').attr('style', function(i,s) { return s + 'overflow-y: scroll !important;' });
+      		$('#browseWithMe').animateAuto('height', 500, heightResize);
       	} else {
       		opened='false';
 			//user closed the app
-      			$('#stuff').attr('style', function(i,s) { return s + 'overflow-y: hidden !important;' });
-      		$('#stuff').animate({ width:'30px' }, { queue: false, duration: 500, complete: function() {
-      			$('#stuff').children().hide();
-				$('#arrow').show();
-      			$('#arrow').attr('src',appAPI.resources.getImage('arrowdown.png'));
-      			var tempSession=currentSession;
-      			leaveRoom();
-      			currentSession=tempSession;
-      		} });
-      		$('#stuff').animate({ height:'30px' }, { queue: false, duration: 500 });
+      		if($('#box').length>0) {
+      			$('#box').animate({ right:'-305px' }, { queue: false, duration: 500, complete: function() {
+		      		$('#browseWithMe').animate({ width:'30px' }, { queue: false, duration: 500, complete: function() {
+		      			$('#browseWithMe').children().hide();
+						$('#arrow').show();
+		      			$('#arrow').attr('src',appAPI.resources.getImage('arrowdown.png'));
+		      		} });
+		      		$('#browseWithMe').animate({ height:'30px' }, { queue: false, duration: 500 });
+	      		} });
+      		} else {
+	      		$('#browseWithMe').animate({ width:'30px' }, { queue: false, duration: 500, complete: function() {
+	      			$('#browseWithMe').children().hide();
+					$('#arrow').show();
+	      			$('#arrow').attr('src',appAPI.resources.getImage('arrowdown.png'));
+	      		} });
+	      		$('#browseWithMe').animate({ height:'30px' }, { queue: false, duration: 500 });
+      		}
+			$('#browseWithMe').css('border-bottom','1px solid rgb(0, 0, 0)');
 		}
 		appAPI.db.set("opened", opened);
     });
@@ -81,10 +82,11 @@ appAPI.ready(function($) {
     currentSession=appAPI.db.get("currentSession");
     sessionOwner=appAPI.db.get("sessionOwner");
     accessToken=appAPI.db.get("access_token");
+    console.log(appAPI.db.get("currentChat"));
     opened=appAPI.db.get("opened");
     var myVar=setInterval(function(){findTokbox()},200);
 	if(accessToken) {
-		$("#stuff").append('<button type="button" id="makeRoom" class="css3button" style="margin-top: 0px; float: left; width: 109px; height: 32px; font-size: 14px;margin-bottom: 8px;">Make Room</button>');
+		$("#browseWithMe").append('<button type="button" id="makeRoom" class="css3button" style="margin-top: 0px; float: left; width: 109px; height: 32px; font-size: 14px;margin-bottom: 8px;">Make Room</button>');
 	    $("#makeRoom").hover(
 	  		function () {
 	  			$("#makeRoom").css( 'cursor', 'pointer' );
@@ -106,17 +108,15 @@ appAPI.ready(function($) {
 	            console.log("Failed to retrieve content.");
 	    });
     }
-    if(opened=='true'&&currentSession.length>0) {
-    	joinRoom(currentSession,sessionOwner);
-    }
-	$('#stuff').attr('style', function(i,s) { return s + 'overflow-y: hidden !important;' });
-  	$('#stuff').width(30);
-  	$('#stuff').children().hide();
+  	$('#browseWithMe').width(30);
+  	$('#browseWithMe').children().hide();
 	$('#arrow').show();
   	$('#arrow').attr('src',appAPI.resources.getImage('arrowdown.png'));
-  	$('#stuff').height(30);
+  	$('#browseWithMe').height(30);
     if(opened=='true') {
     	$('#arrow').click();
+    } else {
+		appAPI.$('#browseWithMe').css('border-bottom','1px solid rgb(0, 0, 0)');
     }
 	}
 });
@@ -128,8 +128,7 @@ function createRoom() {
             // Display the response
             var username = jQuery.parseJSON(response).name;
             var thumbnail = jQuery.parseJSON(response).thumbnail_url;
-        	var numberToSend=appAPI.db.get("session");
-			appAPI.db.set("sessionOwner", sessionOwner);
+        	var numberToSend=Math.floor(Math.random()*1000000000);
 			appAPI.db.set("currentSession", numberToSend);
 		    var d = new Date();
 		    appAPI.request.post(
@@ -149,10 +148,7 @@ function createRoom() {
 	});
 }
 function leaveRoom() {
-	token="";
-	disconnect();
-	appAPI.$('.byeByeStreams').remove();
-	videoCount=0;
+	appAPI.$('#browseWithMe').css('border-bottom','1px solid rgb(0, 0, 0)');
 	var currSess=currentSession;
 	appAPI.request.get(
 	        "https://api.singly.com/profile?access_token="+accessToken,
@@ -179,10 +175,15 @@ function leaveRoom() {
 	        }
 	);
 	appAPI.db.set("currentSession", "");
-	appAPI.db.set("currentChat", "");
-	appAPI.$('#chat').slideUp(400, function() {
-	    appAPI.$('#chat').empty().remove();
-  });
+	appAPI.db.set("currentChat", "#");
+	
+    console.log(appAPI.db.get("currentChat"));
+    appAPI.$('#box').animate({ right:'-305px' }, { queue: false, duration: 500, complete: function() {
+		appAPI.$('#chat').slideUp(500, function() {
+		    appAPI.$('#chat').empty().remove();
+	  });
+	    appAPI.$('#box').empty().remove();
+	}});
 	appAPI.$("#makeRoom").text("Make Room");
 	appAPI.$("#makeRoom").unbind('click');
     appAPI.$("#makeRoom").click(function () {
@@ -192,21 +193,25 @@ function leaveRoom() {
 	heightResize();
 }
 function joinRoom(numberToSend,uname) {
-	if(token!="") { return; }
-	getToken(numberToSend);
 	sessionOwner=uname;
 	appAPI.db.set("sessionOwner", sessionOwner);
 	currentSession=numberToSend;
 	    appAPI.$('.otherRooms').remove();
-	    appAPI.$("#stuff").append('<div id="chat" style="font-size: 14px;clear:both;margin-bottom:10px;margin-left:9px;"><div><input id="wordsPutHere" style="font-size: 14px;width: 87%;margin-top: 4px;margin-bottom: 7px;" id=input placeholder="Type here" /></div><div id=box>'+appAPI.db.get("currentChat")+'</div></div>');
-		appAPI.$("#chat").hide().slideDown();
+	    appAPI.$("#browseWithMe").append('<div id="chat" style="display:none();font-size: 14px;clear:both;margin-bottom:10px;margin-left:9px;"><div><input id="wordsPutHere" style="font-size: 14px;width: 87%;margin-top: 4px;margin-bottom: 7px;" id=input placeholder="Type here" /></div></div>');
+	    if(appAPI.db.get("currentChat")!='#')
+	    	appAPI.$("#browseWithMe").before('<div id="box" style="background: white;border-left: black 1px solid;border-bottom: black 1px solid;display: block;position: absolute;right: -305px;top: 161px;width: 301px;height: auto;z-index: 10000;"">'+appAPI.db.get("currentChat")+'</div>');
+		else
+			appAPI.$("#browseWithMe").before('<div id="box" style="background: white;border-left: black 1px solid;border-bottom: black 1px solid;display: block;position: absolute;right: -305px;top: 161px;width: 301px;height: auto;z-index: 10000;""></div>');
+		appAPI.$("#chat").slideDown(400, function() {
+			appAPI.$('#box').animate({ right:'0px' }, { queue: false, duration: 500 });
+		});
 	appAPI.db.set("currentSession", numberToSend);
 	appAPI.$("#makeRoom").text("Leave Room");
 	appAPI.$("#makeRoom").unbind('click');
 	appAPI.$("#makeRoom").click(function () {
 		leaveRoom();
   	});
-	if(appAPI.db.get("currentChat")==null) {
+	if(appAPI.db.get("currentChat")==null||appAPI.db.get("currentChat")=="#") {
 		appAPI.db.set("currentChat", "");
 	}
     pubnub = PUBNUB.init({
@@ -220,15 +225,27 @@ function joinRoom(numberToSend,uname) {
     pubnub.subscribe({
         channel : numberToSend,
         callback : function(text) {
-        	if(text!=null) {
+        	if(text!=null&&appAPI.db.get("currentChat")!='#') {
         	text=urlify((''+text).replace( /[<>]/g, '' ));
         	box.innerHTML = text + '<br>' + box.innerHTML;
 			appAPI.db.set("currentChat", appAPI.$('#box').html());
+			
+    console.log(appAPI.db.get("currentChat"));
 			heightResize();
+			checkBorder();
         	if(text==sessionOwner+" has left the chat") {
 	        	box.innerHTML = 'You will now be disconnected<br>' + box.innerHTML;
         		window.setTimeout(leaveRoom, 2000);
         	}
+        	appAPI.request.get(
+		        "https://api.singly.com/profile?access_token="+accessToken,
+		        function(response, headers) {
+		            // Display the response
+		            var username = jQuery.parseJSON(response).name;
+		        	if(text==username+" has left the chat") {
+		        		leaveRoom();
+		        	}
+		        });
         	}
         }
     });
@@ -248,9 +265,10 @@ function joinRoom(numberToSend,uname) {
 	        }
 	);
 	heightResize();
+	checkBorder();
 }
 function findTokbox() {
-	if(currentSession!='') { return; }
+	if(currentSession!=''||opened=='false') { return; }
     var peers=new Array();
     myDataRef = new Firebase('https://browserwithfriends.firebaseIO.com/');
     if(accessToken) {
@@ -280,7 +298,7 @@ function findTokbox() {
 								appAPI.$('#'+currentRoom).empty();
 								appAPI.$('#'+currentRoom).remove();
 							} else if(currentSession==''&&currentRoom!=''&&currentRoom!='done'&&appAPI.$('#'+currentRoom).length==0) {
-								appAPI.$("#stuff").append('<a id="'+currentRoom+'" class="otherRooms" style="margin-right: 29px; clear: both;margin-bottom: 5px;float: right;"><div style=" display: inline-block; position: relative; top: -17px; font-size: 19px; ">'+userName+'</div><img src="'+thumbnail+'" style="height: 50px;margin-left: 5px;"></button>');
+								appAPI.$("#browseWithMe").append('<a id="'+currentRoom+'" class="otherRooms" style="margin-right: 29px; clear: both;margin-bottom: 5px;float: right;"><div style=" display: inline-block; position: relative; top: -17px; font-size: 19px; ">'+userName+'</div><img src="'+thumbnail+'" style="height: 50px;margin-left: 5px;"></button>');
 								appAPI.$("#"+currentRoom).hide().slideDown();
 					        	appAPI.$("#"+currentRoom).hover(
 						  		function () {
@@ -306,6 +324,13 @@ function findTokbox() {
 	    });
     }
 }
+function checkBorder() {
+	if(appAPI.$('#box').length!=0&&appAPI.$(window).scrollTop()<appAPI.$('#box').height()) {
+		appAPI.$('#browseWithMe').css('border-bottom','0px none rgb(0, 0, 0)');
+	} else if(appAPI.$('#box').length==0||appAPI.$(window).scrollTop()>=appAPI.$('#box').height()) {
+		appAPI.$('#browseWithMe').css('border-bottom','1px solid rgb(0, 0, 0)');
+	}
+}
 function getHashVariable(name) {
 	var s=window.location.hash.substring(1);
 	var stuff=s.split("&");
@@ -318,15 +343,17 @@ function getHashVariable(name) {
 	return null;
 }
 function heightResize() {
-	appAPI.$('#stuff').height('auto');
-	if(appAPI.$('#stuff').height()>appAPI.$(window).height()) {
-		appAPI.$('#stuff').height('100%');
-	}
-	appAPI.$('.OT_video-container').css('position','static');
+	appAPI.$('#browseWithMe').height('auto');
 }
 function urlify(text) {
     var urlRegex = /(https?:\/\/[^\s]+)/g;
     return text.replace(urlRegex, function(url) {
+		if(url.length>17&&url.substring(0,17)=="http://imgur.com/") {
+			return '<a href=http://i.imgur.com/'+url.substring(17,url.length)+'.jpg target="_blank"><img src=http://i.imgur.com/'+url.substring(17,url.length)+'.jpg width="270px"/></a>';
+		}
+		if(url.length>30&&url.substring(0,30)=="https://www.youtube.com/watch?"||url.length>29&&url.substring(0,29)=="http://www.youtube.com/watch?") {
+			return '<object width="270" height="151.875"><param name="movie" value="https://www.youtube.com/v/'+url.replace(/^[^v]+v.(.{11}).*/,"$1")+'?version=3"></param><param name="allowFullScreen" value="true"></param><param name="allowScriptAccess" value="always"></param><embed src="https://www.youtube.com/v/'+url.replace(/^[^v]+v.(.{11}).*/,"$1")+'?version=3" type="application/x-shockwave-flash" allowfullscreen="true" allowScriptAccess="always" width="270" height="151.875"></embed></object>';
+		}
     	var lastFour=url.substring(url.length-4,url.length);
     	var lastThree=url.substring(url.length-3,url.length);
     	if(lastFour=='jpeg'||lastThree=='gif'||lastThree=='jpg'||lastThree=='png') {
@@ -350,160 +377,4 @@ jQuery.fn.animateAuto = function(prop, speed, callback){
         else if(prop === "both")
             el.animate({"width":width,"height":height}, speed, callback);
     });  
-}
-function getToken(sessh) {
-	appAPI.request.get(
-	        "https://api.singly.com/profiles?access_token="+accessToken,
-	        function(response, headers) {
-	            // Display the response
-	            user = jQuery.parseJSON(response).id;
-				appAPI.request.post(
-			        "http://songtb.herokuapp.com/stringgeneratetoken",
-			        // Data to post
-			        '{"key":"'+apiKey+'", "secret":"'+apiSecret+'", "session":"'+sessh+'", "data":"'+user+'"}',
-			        function(response) {
-			        	token=jQuery.parseJSON(response).token;
-						appAPI.db.set("token", token);
-						beginSession(sessh);
-			        },
-			        function(e) {
-			        	console.log(e);
-			    });
-	        },
-	        function() {
-	            console.log("Failed to retrieve content.");
-	    });
-}
-function beginSession(sessh) {
-	appAPI.TB.addEventListener("exception", exceptionHandler);
-	// Un-comment the following to set automatic logging:
-	// TB.setLogLevel(TB.DEBUG);
-	
-	if (appAPI.TB.checkSystemRequirements() != appAPI.TB.HAS_REQUIREMENTS) {
-		alert("You don't have the minimum requirements to run this application. Please upgrade to the latest version of Flash.");
-	} else {
-		session = appAPI.TB.initSession(sessh);	// Initialize session
-	
-		// Add event listeners to the session
-		session.addEventListener('sessionConnected', sessionConnectedHandler);
-		session.addEventListener('sessionDisconnected', sessionDisconnectedHandler);
-		session.addEventListener('connectionCreated', connectionCreatedHandler);
-		session.addEventListener('connectionDestroyed', connectionDestroyedHandler);
-		session.addEventListener('streamCreated', streamCreatedHandler);
-		session.addEventListener('streamDestroyed', streamDestroyedHandler);
-		connect();
-	}
-}
-
-//--------------------------------------
-//  LINK CLICK HANDLERS
-//--------------------------------------
-
-/*
-If testing the app from the desktop, be sure to check the Flash Player Global Security setting
-to allow the page from communicating with SWF content loaded from the web. For more information,
-see http://www.tokbox.com/opentok/build/tutorials/helloworld.html#localTest
-*/
-function connect() {
-	session.connect(apiKey, token);
-}
-
-function disconnect() {
-	if(session!=undefined) {
-		stopPublishing();
-		session.disconnect();
-	}
-}
-
-// Called when user wants to start publishing to the session
-function startPublishing() {
-	if (!publisher) {
-		var parentDiv = appAPI.$("#stuff");
-		var publisherDiv = document.createElement('div'); // Create a div for the publisher to replace
-		publisherDiv.setAttribute('id', 'opentok_publisher');
-		publisherDiv.setAttribute('style', 'position: fixed;height: 105px;overflow: hidden;width: 140px;top: 5px;right: 310px;z-index: 100000;');
-		parentDiv.before(publisherDiv);
-		var publisherProps = {width: VIDEO_WIDTH, height: VIDEO_HEIGHT};
-		publisher = appAPI.TB.initPublisher(apiKey, publisherDiv.id, publisherProps);  // Pass the replacement div id and properties
-		session.publish(publisher);
-		heightResize();
-		videoCount++;
-	}
-}
-
-function stopPublishing() {
-	if (publisher) {
-		session.unpublish(publisher);
-	}
-	publisher = null;
-}
-
-//--------------------------------------
-//  OPENTOK EVENT HANDLERS
-//--------------------------------------
-
-function sessionConnectedHandler(event) {
-	// Subscribe to all streams currently in the Session
-	startPublishing();
-	for (var i = 0; i < event.streams.length; i++) {
-		addStream(event.streams[i]);
-	}
-}
-
-function streamCreatedHandler(event) {
-	// Subscribe to the newly created streams
-	for (var i = 0; i < event.streams.length; i++) {
-		addStream(event.streams[i]);
-	}
-}
-
-function streamDestroyedHandler(event) {
-	// This signals that a stream was destroyed. Any Subscribers will automatically be removed.
-	// This default behaviour can be prevented using event.preventDefault()
-	videoCount--;
-}
-
-function sessionDisconnectedHandler(event) {
-	// This signals that the user was disconnected from the Session. Any subscribers and publishers
-	// will automatically be removed. This default behaviour can be prevented using event.preventDefault()
-	publisher = null;
-}
-
-function connectionDestroyedHandler(event) {
-	// This signals that connections were destroyed
-}
-
-function connectionCreatedHandler(event) {
-	// This signals new connections have been created.
-}
-
-/*
-If you un-comment the call to TB.setLogLevel(), above, OpenTok automatically displays exception event messages.
-*/
-function exceptionHandler(event) {
-	alert("Exception: " + event.code + "::" + event.message);
-}
-
-//--------------------------------------
-//  HELPER METHODS
-//--------------------------------------
-
-function addStream(stream) {
-	// Check if this is the stream that I am publishing, and if so do not publish.
-	console.log(subscribers);
-	if (stream.connection.connectionId == session.connection.connectionId||stream.connection.data==user) {
-		return;
-	}
-	var parentDiv = appAPI.$("#stuff");
-	var publisherDiv = document.createElement('div'); // Create a div for the publisher to replace
-	publisherDiv.setAttribute('id', stream.streamId);
-	publisherDiv.setAttribute('class', 'byeByeStreams');
-	console.log(subscribers);
-	var topLocation=videoCount*110+5;
-	publisherDiv.setAttribute('style', 'position: fixed;height: 105px;overflow: hidden;width: 140px;top: '+topLocation+'px;right: 310px;z-index: 100000;');
-	parentDiv.before(publisherDiv);
-	var subscriberProps = {width: VIDEO_WIDTH, height: VIDEO_HEIGHT};
-	subscribers[stream.streamId] = session.subscribe(stream, stream.streamId, subscriberProps);
-	heightResize();
-	videoCount++;
 }

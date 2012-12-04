@@ -8,6 +8,7 @@ var currentSession="";
 var pubnub;
 var sessionOwner="";
 var opened="true";
+var username="";
 
 var scrollListener;
 
@@ -39,6 +40,7 @@ appAPI.ready(function($) {
 	);
 	$('#arrow').click(function () {
 		if($('#browseWithMe').width()<=50) {
+			appAPI.message.toAllOtherTabs({minimize:"no"});
 			//user opened the app
 			opened='true';
 	      	$('#browseWithMe').children().show();
@@ -53,6 +55,7 @@ appAPI.ready(function($) {
       		} });
       		$('#browseWithMe').animateAuto('height', 500, heightResize);
       	} else {
+			appAPI.message.toAllOtherTabs({minimize:"yes"});
       		opened='false';
 			//user closed the app
       		if($('#box').length>0) {
@@ -82,9 +85,8 @@ appAPI.ready(function($) {
     currentSession=appAPI.db.get("currentSession");
     sessionOwner=appAPI.db.get("sessionOwner");
     accessToken=appAPI.db.get("access_token");
-    console.log(appAPI.db.get("currentChat"));
     opened=appAPI.db.get("opened");
-    var myVar=setInterval(function(){findTokbox()},200);
+    setInterval(function(){findTokbox()},200);
 	if(accessToken) {
 		$("#browseWithMe").append('<button type="button" id="makeRoom" class="css3button" style="margin-top: 0px; float: left; width: 109px; height: 32px; font-size: 14px;margin-bottom: 8px;">Make Room</button>');
 	    $("#makeRoom").hover(
@@ -118,6 +120,56 @@ appAPI.ready(function($) {
     } else {
 		appAPI.$('#browseWithMe').css('border-bottom','1px solid rgb(0, 0, 0)');
     }
+    appAPI.message.addListener(function(msg) {
+        if (msg.currentSess!=null&&msg.sessOwner!=null&&currentSession=="") {
+        	currentSession=msg.currentSess;
+        	sessionOwner=msg.sessOwner;
+        	appAPI.db.set("currentSession",currentSession);
+        	appAPI.db.set("sessionOwner",sessionOwner);
+			joinRoom(currentSession,sessionOwner);
+        }
+        if(msg.leaveRoom!=null&&currentSession!="") {
+        	leaveRoom();
+        }
+        if(msg.minimize!=null) {
+        	if(msg.minimize!='yes'&&$('#browseWithMe').width()<=50) {
+				//user opened the app
+				opened='true';
+		      	$('#browseWithMe').children().show();
+	      		$('#browseWithMe').animate({ width:'300px' }, { queue: false, duration: 500, complete: function() {
+	      			$('#arrow').attr('src',appAPI.resources.getImage('arrowup.png'));
+	      			if(appAPI.$('#box').length>0) $('#box').animate({ right:'0px' }, { queue: false, duration: 500 });
+					checkBorder();
+					if(currentSession.length>0&&$('#chat').length==0) {
+						joinRoom(currentSession,sessionOwner);
+					}
+	      			heightResize();
+	      		} });
+	      		$('#browseWithMe').animateAuto('height', 500, heightResize);
+        	} else if(msg.minimize=='yes'&&$('#browseWithMe').width()>50) {
+        		opened='false';
+				//user closed the app
+	      		if($('#box').length>0) {
+	      			$('#box').animate({ right:'-305px' }, { queue: false, duration: 500, complete: function() {
+			      		$('#browseWithMe').animate({ width:'30px' }, { queue: false, duration: 500, complete: function() {
+			      			$('#browseWithMe').children().hide();
+							$('#arrow').show();
+			      			$('#arrow').attr('src',appAPI.resources.getImage('arrowdown.png'));
+			      		} });
+			      		$('#browseWithMe').animate({ height:'30px' }, { queue: false, duration: 500 });
+		      		} });
+	      		} else {
+		      		$('#browseWithMe').animate({ width:'30px' }, { queue: false, duration: 500, complete: function() {
+		      			$('#browseWithMe').children().hide();
+						$('#arrow').show();
+		      			$('#arrow').attr('src',appAPI.resources.getImage('arrowdown.png'));
+		      		} });
+		      		$('#browseWithMe').animate({ height:'30px' }, { queue: false, duration: 500 });
+	      		}
+				$('#browseWithMe').css('border-bottom','1px solid rgb(0, 0, 0)');
+        	}
+        }
+    });
 	}
 });
 function createRoom() {
@@ -126,7 +178,7 @@ function createRoom() {
         "https://api.singly.com/profile?access_token="+accessToken,
         function(response, headers) {
             // Display the response
-            var username = jQuery.parseJSON(response).name;
+            username = jQuery.parseJSON(response).name;
             var thumbnail = jQuery.parseJSON(response).thumbnail_url;
         	var numberToSend=Math.floor(Math.random()*1000000000);
 			appAPI.db.set("currentSession", numberToSend);
@@ -154,7 +206,7 @@ function leaveRoom() {
 	        "https://api.singly.com/profile?access_token="+accessToken,
 	        function(response, headers) {
 	            // Display the response
-	            var username = jQuery.parseJSON(response).name;
+	            username = jQuery.parseJSON(response).name;
 				if(username==sessionOwner) {
 					var d = new Date();
 					appAPI.request.post(
@@ -175,7 +227,7 @@ function leaveRoom() {
 	        }
 	);
 	appAPI.db.set("currentSession", "");
-	appAPI.db.set("currentChat", "#");
+	appAPI.db.set("currentChat", "");
 	
     console.log(appAPI.db.get("currentChat"));
     appAPI.$('#box').animate({ right:'-305px' }, { queue: false, duration: 500, complete: function() {
@@ -191,27 +243,25 @@ function leaveRoom() {
   	});
 	currentSession="";
 	heightResize();
+	appAPI.message.toAllOtherTabs({leaveRoom:"yes"});
 }
 function joinRoom(numberToSend,uname) {
 	sessionOwner=uname;
 	appAPI.db.set("sessionOwner", sessionOwner);
 	currentSession=numberToSend;
-	    appAPI.$('.otherRooms').remove();
-	    appAPI.$("#browseWithMe").append('<div id="chat" style="display:none();font-size: 14px;clear:both;margin-bottom:10px;margin-left:9px;"><div><input id="wordsPutHere" style="font-size: 14px;width: 87%;margin-top: 4px;margin-bottom: 7px;" id=input placeholder="Type here" /></div></div>');
-	    if(appAPI.db.get("currentChat")!='#')
-	    	appAPI.$("#browseWithMe").before('<div id="box" style="background: white;border-left: black 1px solid;border-bottom: black 1px solid;display: block;position: absolute;right: -305px;top: 161px;width: 301px;height: auto;z-index: 10000;"">'+appAPI.db.get("currentChat")+'</div>');
-		else
-			appAPI.$("#browseWithMe").before('<div id="box" style="background: white;border-left: black 1px solid;border-bottom: black 1px solid;display: block;position: absolute;right: -305px;top: 161px;width: 301px;height: auto;z-index: 10000;""></div>');
-		appAPI.$("#chat").slideDown(400, function() {
-			appAPI.$('#box').animate({ right:'0px' }, { queue: false, duration: 500 });
-		});
+    appAPI.$('.otherRooms').remove();
+    appAPI.$("#browseWithMe").append('<div id="chat" style="display:none();font-size: 14px;clear:both;margin-bottom:10px;margin-left:9px;"><div><input id="wordsPutHere" style="font-size: 14px;width: 87%;margin-top: 4px;margin-bottom: 7px;" id=input placeholder="Type here" /></div></div>');
+    appAPI.$("#browseWithMe").before('<div id="box" style="background: white;border-left: black 1px solid;border-bottom: black 1px solid;display: block;position: absolute;right: -305px;top: 161px;width: 301px;height: auto;z-index: 10000;"">'+appAPI.db.get("currentChat")+'</div>');
+	appAPI.$("#chat").slideDown(400, function() {
+		appAPI.$('#box').animate({ right:'0px' }, { queue: false, duration: 500 });
+	});
 	appAPI.db.set("currentSession", numberToSend);
 	appAPI.$("#makeRoom").text("Leave Room");
 	appAPI.$("#makeRoom").unbind('click');
 	appAPI.$("#makeRoom").click(function () {
 		leaveRoom();
   	});
-	if(appAPI.db.get("currentChat")==null||appAPI.db.get("currentChat")=="#") {
+	if(appAPI.db.get("currentChat")==null) {
 		appAPI.db.set("currentChat", "");
 	}
     pubnub = PUBNUB.init({
@@ -225,47 +275,48 @@ function joinRoom(numberToSend,uname) {
     pubnub.subscribe({
         channel : numberToSend,
         callback : function(text) {
-        	if(text!=null&&appAPI.db.get("currentChat")!='#') {
-        	text=urlify((''+text).replace( /[<>]/g, '' ));
-        	box.innerHTML = text + '<br>' + box.innerHTML;
-			appAPI.db.set("currentChat", appAPI.$('#box').html());
-			
-    console.log(appAPI.db.get("currentChat"));
-			heightResize();
-			checkBorder();
-        	if(text==sessionOwner+" has left the chat") {
-	        	box.innerHTML = 'You will now be disconnected<br>' + box.innerHTML;
-        		window.setTimeout(leaveRoom, 2000);
-        	}
-        	appAPI.request.get(
-		        "https://api.singly.com/profile?access_token="+accessToken,
-		        function(response, headers) {
-		            // Display the response
-		            var username = jQuery.parseJSON(response).name;
-		        	if(text==username+" has left the chat") {
-		        		leaveRoom();
-		        	}
-		        });
+        	if(text!=null) {
+        		if(text.length>=currentSession.length&&text.substring(0,currentSession.length)==currentSession) {
+        			if(text==currentSession) {
+						pubnub.publish({
+							 channel : currentSession, message : currentSession+box.innerHTML
+							 });
+        			} else {
+        				if(appAPI.db.get('currentChat')=="") {
+        					box.innerHTML=text.substring(currentSession.length,text.length);
+        				}
+        			}
+        		} else {
+			    	text=urlify((''+text).replace( /[<>]/g, '' ));
+			    	box.innerHTML = text + '<br>' + box.innerHTML;
+					appAPI.db.set("currentChat", appAPI.$('#box').html());
+					heightResize();
+					checkBorder();
+        		}
         	}
         }
     });
 		pubnub.bind( 'keyup', wordsPutHere, function(e) {
-		 (e.keyCode || e.charCode) === 13 && pubnub.publish({
-		 channel : numberToSend, message : appAPI.$('#wordsPutHere').val(), x : (appAPI.$('#wordsPutHere').val(''))
+		 if((e.keyCode || e.charCode) === 13) {
+		 //appAPI.$("html, body").animate({ scrollTop: 0 }); uncomment to scroll page to top when something is sent
+		 pubnub.publish({
+		 channel : numberToSend, message : username+": "+appAPI.$('#wordsPutHere').val(), x : (appAPI.$('#wordsPutHere').val(''))
 		 });
+		}
 	});
+	pubnub.publish({
+		 channel : currentSession, message : currentSession
+		 });
 	appAPI.request.get(
 	        "https://api.singly.com/profile?access_token="+accessToken,
 	        function(response, headers) {
 	            // Display the response
-	            var username = jQuery.parseJSON(response).name;
-				pubnub.publish({
-					 channel : numberToSend, message : username+' has joined the chat'
-					 });
+	            username = jQuery.parseJSON(response).name;
 	        }
 	);
 	heightResize();
 	checkBorder();
+	appAPI.message.toAllOtherTabs({currentSess:currentSession, sessOwner:sessionOwner});
 }
 function findTokbox() {
 	if(currentSession!=''||opened=='false') { return; }
